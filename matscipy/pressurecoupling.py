@@ -2,8 +2,8 @@
 # matscipy - Python materials science tools
 # https://github.com/libAtoms/matscipy
 #
-# Copyright (2014) James Kermode, King's College London
-#                  Lars Pastewka, Karlsruhe Institute of Technology
+# Copyright (2020) Alexander Held,
+#                  Thomas Reichenbach
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,15 +21,13 @@
 
 """
 
-This python module provides classes to be used together with ASE in order to
-perform pressure relaxation and/or sliding simulations under pressure.
+Classes to be used with ASE in order to perform pressure relaxation and/or sliding simulations under pressure.
 
 A usage example is found in the example directory.
 
 Some parts are based on L. Pastewka, S. Moser, and M. Moseler, Tribol. Lett. 39, 49 (2010)
 as indicated again below.
 
-Author: Alexander Held
 """
 
 from __future__ import (
@@ -38,30 +36,49 @@ from __future__ import (
     print_function,
     unicode_literals
 )
+import logging
 import numpy as np
 from ase.units import kB, fs, GPa
-import logging
+
 
 logger = logging.getLogger(__name__)
 
 
 class AutoDamping(object):
-    """Automatic damping
+    """Automatic damping.
 
     Following L. Pastewka, S. Moser, and M. Moseler,
     Tribol. Lett. 39, 49 (2010).
+
+    Parameters
+    ----------
+    C11 : float
+        Elastic material constant.
+    p_c : float
+        Empirical cut-off parameter.
     """
 
     def __init__(self, C11, p_c=0.01):
-        """Constructor.
-
-        Arguments as described in L. Pastewka, S. Moser, and M. Moseler,
-        Tribol. Lett. 39, 49 (2010).
-        """
         self.C11 = float(C11)
         self.p_c = float(p_c)
 
     def get_M_gamma(self, slider, atoms):
+        """Calculate mass M and dissipation constant gamma.
+
+        Parameters
+        ----------
+        slider : matscipy.pressurecoupling.SlideWithNormalPressureCuboidCell
+            ASE constraint used for sliding with pressure coupling.
+        atoms : ase.Atoms
+            Atomic configuration.
+
+        Returns
+        -------
+        M: float
+            Mass parameter.
+        gamma : float
+            Dissipation constant parameter.
+        """
         A = slider.get_A(atoms)
         l = atoms.cell[slider.vdir, slider.vdir]
         t_c = l / slider.v
@@ -77,13 +94,37 @@ class AutoDamping(object):
 
 
 class FixedDamping(object):
-    """Damping with fixed damping constant and fixed mass."""
+    """Damping with fixed damping constant and fixed mass.
+
+    Parameters
+    ----------
+    gamma : float
+        Damping constant.
+    M_factor : float
+        Multiplicative factor to increase actual mass of upper rigid atoms.
+    """
 
     def __init__(self, gamma, M_factor=1.0):
         self.gamma = float(gamma)
         self.M_factor = float(M_factor)
 
     def get_M_gamma(self, slider, atoms):
+        """Calculate mass M and damping constant gamma.
+
+        Parameters
+        ----------
+        slider : matscipy.pressurecoupling.SlideWithNormalPressureCuboidCell
+            ASE constraint used for sliding with pressure coupling.
+        atoms : ase.Atoms
+            Atomic configuration.
+
+        Returns
+        -------
+        M: float
+            Mass parameter.
+        gamma : float
+            Damping parameter.
+        """
         M_top = atoms.get_masses()[slider.top_mask].sum()
         return M_top * self.M_factor, self.gamma
 
@@ -92,6 +133,13 @@ class FixedMassCriticalDamping(object):
     """Damping with fixed mass and critical damping constant.
 
     Useful for fast pressure equilibration with small lid mass.
+
+    Parameters
+    ----------
+    C11 : float
+        Elastic material constant.
+    M_factor : float
+        Multiplicative factor to increase actual mass of upper rigid atoms.
     """
 
     def __init__(self, C11, M_factor=1.0):
@@ -99,6 +147,22 @@ class FixedMassCriticalDamping(object):
         self.M_factor = float(M_factor)
 
     def get_M_gamma(self, slider, atoms):
+        """Calculate mass M and damping constant gamma.
+
+        Parameters
+        ----------
+        slider : matscipy.pressurecoupling.SlideWithNormalPressureCuboidCell
+            ASE constraint used for sliding with pressure coupling.
+        atoms : ase.Atoms
+            Atomic configuration.
+
+        Returns
+        -------
+        M: float
+            Mass parameter.
+        gamma : float
+            Damping parameter.
+        """
         M_top = atoms.get_masses()[slider.top_mask].sum()
         M = M_top * self.M_factor
         A = slider.get_A(atoms)
@@ -111,30 +175,31 @@ class FixedMassCriticalDamping(object):
 
 
 class SlideWithNormalPressureCuboidCell(object):
-    """ASE constraint used for sliding with pressure coupling
+    """ASE constraint used for sliding with pressure coupling.
 
-    Only works with diagonal cuboid cells so far.
-    Sliding only works along cell vectors so far.
     Following L. Pastewka, S. Moser, and M. Moseler,
     Tribol. Lett. 39, 49 (2010).
+
+    Parameters
+    ----------
+    top_mask : boolean numpy array
+        Array a with a[i] == True for each index i of the
+        constraint top atoms (the atoms which slide with constant speed).
+    bottom_mask : boolean numpy array
+        same as top_mask but for completely fixed bottom atoms.
+    Pdir : int
+        Index of cell axis (0, 1, 2) along which normal pressure is applied.
+    P : int
+        Normal pressure in ASE units (e.g. 10.0 * ase.units.GPa).
+    vdir : int
+        Index of cell axis (0, 1, 2) along which to slide.
+    v : float
+        Constant sliding speed in ASE units (e.g. 100.0 * ase.units.m / ase.units.s).
+    damping :
+        Damping object (e.g. matscipy.pressurecoupling.AutoDamping instance).
     """
 
     def __init__(self, top_mask, bottom_mask, Pdir, P, vdir, v, damping):
-        """Constructor.
-
-        top_mask -- boolean numpy array a with a[i] == True for i the index
-                    of a constraint top atom (the atoms which slide with
-                    constant speed)
-        bottom_mask -- same as top_mask but for completely fixed bottom
-                       atoms
-        Pdir -- index of cell axis (0, 1, 2) along which normal pressure
-                is applied
-        P -- normal pressure in ASE units (e.g. 10.0 * ase.units.GPa)
-        vdir -- index of cell axis (0, 1, 2) along which to slide
-        v -- constant sliding speed in ASE units
-             (e.g. 100.0 * ase.units.m / ase.units.s)
-        damping -- a damping object (e.g. AutoDamping instance)
-        """
         self.top_mask = top_mask
         self.Ntop = top_mask.sum()
         self.bottom_mask = bottom_mask
@@ -146,6 +211,16 @@ class SlideWithNormalPressureCuboidCell(object):
 
     @property
     def Tdir(self):
+        """Direction used for thermostatting.
+
+        Thermostat direction is normal to the sliding direction and the direction of the
+        applied load direction.
+
+        Returns
+        -------
+        int
+            Direction used for thermostatting.
+        """
         all_dirs = {0, 1, 2}
         all_dirs.remove(self.Pdir)
         all_dirs.remove(self.vdir)
@@ -153,12 +228,36 @@ class SlideWithNormalPressureCuboidCell(object):
 
     @property
     def middle_mask(self):
+        """Mask of free atoms.
+
+        Returns
+        -------
+        numpy boolean array
+            Array a with a[i] == True for each index i of the atoms
+            not being part of lower or upper rigid group.
+        """
         return np.logical_not(np.logical_or(self.top_mask, self.bottom_mask))
 
     def adjust_positions(self, atoms, positions):
+        """Do not adjust positions."""
         pass
 
     def get_A(self, atoms):
+        """Calculate cell area normal to applied load.
+
+        Returns
+        -------
+        float
+            Cell area normal to applied load.
+
+        Raises
+        ------
+        NotImplementedError
+            If atoms.get_cell() is non-orthogonal,
+            SlideWithNormalPressureCuboidCell only works for orthogonal cells.
+        """
+        if np.abs(atoms.get_cell().sum() - atoms.get_cell().trace()) > 0:
+            raise NotImplementedError("Can't do non-orthogonal cell!")
         A = 1.0
         for c in (0, 1, 2):
             if c != self.Pdir:
@@ -166,6 +265,16 @@ class SlideWithNormalPressureCuboidCell(object):
         return A
 
     def adjust_forces(self, atoms, forces):
+        """Adjust forces of upper and lower rigid atoms.
+
+        Raises
+        ------
+        NotImplementedError
+            If atoms.get_cell() is non-orthogonal,
+            SlideWithNormalPressureCuboidCell only works for orthogonal cells.
+        """
+        if np.abs(atoms.get_cell().sum() - atoms.get_cell().trace()) > 0:
+            raise NotImplementedError("Can't do non-orthogonal cell!")
         A = self.get_A(atoms)
         M, gamma = self.damping.get_M_gamma(self, atoms)
         Ftop = forces[self.top_mask, self.Pdir].sum()
@@ -177,6 +286,16 @@ class SlideWithNormalPressureCuboidCell(object):
         forces[self.top_mask, self.Pdir] = atoms.get_masses()[self.top_mask] * a
 
     def adjust_momenta(self, atoms, momenta):
+        """Adjust momenta of upper and lower rigid atoms.
+
+        Raises
+        ------
+        NotImplementedError
+            If atoms.get_cell() is non-orthogonal,
+            SlideWithNormalPressureCuboidCell only works for orthogonal cells.
+        """
+        if np.abs(atoms.get_cell().sum() - atoms.get_cell().trace()) > 0:
+            raise NotImplementedError("Can't do non-orthogonal cell!")
         top_masses = atoms.get_masses()[self.top_mask]
         vtop = (momenta[self.top_mask, self.Pdir] / top_masses).sum() / self.Ntop
         momenta[self.bottom_mask, :] = 0.0
@@ -185,51 +304,54 @@ class SlideWithNormalPressureCuboidCell(object):
         momenta[self.top_mask, self.Pdir] = vtop * top_masses
 
     def adjust_potential_energy(self, atoms):
+        """Do not adjust energy."""
         return 0.0
 
 
 class SlideLogger(object):
-    """Logger to be attached to an ASE integrator."""
+    """Logger to be attached to an ASE integrator.
 
-    def __init__(self, handle, atoms, slider, integrator, step_offset=0):
-        """Constructor.
+    For new files (not restart jobs), the write_header method should
+    be called once in order to write the header to the file. Also note
+    that ASE does not write the time step 0 automatically.
+    You can do so by calling the SlideLogger instance once
+    before starting the integration as in example 1 below.
 
-        handle -- filehandle e.g. pointing to a file opened in w or a mode
-        atoms -- the ASE atoms object
-        slider -- slider object
-                  (e.g. instance of SlideWithNormalPressureCuboidCell)
-        integrator -- ASE integrator object,
-                      e.g. ase.md.langevin.Langevin instance
-        step_offset -- for restart jobs: last step already written to log file
+    Parameters
+    ----------
+    handle : filehandle
+       Filehandle e.g. pointing to a file opened in w or a mode.
+    atoms : ase.Atoms
+        Atomic configuration.
+    slider : slider object
+        Instance of SlideWithNormalPressureCuboidCell.
+    integrator : ASE integrator object,
+        Instance of ASE integrator e.g. ase.md.langevin.Langevin.
+    step_offset : int
+        Last step already written to log file, useful for restarts.
 
-        For new files (not restart jobs), the write_header method should
-        be called once in order to write the header to the file. Also note
-        that ASE does *NOT* write the time step 0 automatically.
-        You can do so by calling the SlideLogger instance once
-        before starting the integration, like so:
-
-        ...
+    Examples
+    --------
+    1. For new runs:
         log_handle = open(logfn, 'w', 1)  # line buffered
         logger = SlideLogger(log_handle, ...)
         logger.write_header()
         logger()
         integrator.attach(logger)
         integrator.run(steps_integrate)
-        log_handle.close()  # or some try ... finally clause
-        ...
+        log_handle.close()
 
-        For a restart job, you can use the following recipe:
-
-        ...
+    2. For restarts:
         with open(logfn, 'r') as log_handle:
             step_offset = SlideLog(log_handle).step[-1]
         log_handle = open(logfn, 'a', 1)  # line buffered append
         logger = SlideLogger(log_handle, ..., step_offset=step_offset)
         integrator.attach(logger)
         integrator.run(steps_integrate)
-        log_handle.close()  # or some try ... finally clause
-        ...
-        """
+        log_handle.close()
+    """
+
+    def __init__(self, handle, atoms, slider, integrator, step_offset=0):
         self.handle = handle
         self.atoms = atoms
         self.slider = slider
@@ -237,9 +359,11 @@ class SlideLogger(object):
         self.step_offset = step_offset
 
     def write_header(self):
+        """Write header of log-file."""
         self.handle.write('# step | time / fs | T_thermostat / K | P_top / GPa | P_bottom / GPa | h / Ang | v / Ang * fs | a / Ang * fs ** 2 | tau_top / GPa | tau_bottom / GPa\n')
 
     def __call__(self):
+        """Write current status (time, T, P, ...) to log-file."""
         slider = self.slider
         atoms = self.atoms
         integrator = self.integrator
@@ -271,29 +395,40 @@ class SlideLogger(object):
 class SlideLog(object):
     """Reader for logs written with SlideLogger instance.
 
-    The data of the log files is found as attributes
-    (numpy arrays with step as axis):
-    step -- step indices 0, 1, 2, ...
-    time -- simulation time in fs at step
-    T_thermostat -- instantaneous temperature in K from thermostatet region
-                    only from degrees of freedom along thermalized
-                    direction
-    P_top -- normal pressure on lid in GPa
-    P_bottom -- normal pressure on base in GPa
-    h -- separation of lid and base in Ang
-    v -- normal speed of lid in Ang / fs
-    a -- normal acceleration of lid in Ang / fs ** 2
-    tau_top -- shear stress on lid in GPa
-    tau_bottom -- shear stress on base in GPa
-    rows -- all data in a 2d array with axis 0 step and axis 1
-            the values in the order as above
+    Parameters
+    ----------
+    handle matscipy.pressurecoupling.SlideLogger instance
+        Handle or filename pointing to log file.
+
+    Attributes
+    ----------
+    step : ndarray
+        Step indices 0, 1, 2, ....
+    time : ndarray
+        Simulation time in fs at step.
+    T_thermostat : ndarray
+        Instantantaneous temperature in K from thermostat-region
+        only from degrees of freedom along thermalized direction.
+    P_top : ndarray
+        Normal pressure on lid in GPa.
+    P_bottom : ndarray
+        Normal pressure on base in GPa.
+    h : ndarray
+        Separation of lid and base in Ang.
+    v : ndarray
+        Normal speed of lid in Ang / fs.
+    a : ndarray
+        Normal acceleration of lid in Ang / fs ** 2.
+    tau_top : ndarray
+        Shear stress on lid in GPa.
+    tau_bottom : ndarray
+        Shear stress on base in GPa.
+    rows : ndarray
+        All data in a 2d array with axis 0 step and axis 1
+        the values ordered as above.
     """
 
     def __init__(self, handle):
-        """Constructor.
-
-        handle -- handle or filename pointing to log file
-        """
         self.rows = np.loadtxt(handle)
         self.step, self.time, self.T_thermostat, self.P_top, self.P_bottom, self.h, self.v, self.a, self.tau_top, self.tau_bottom = self.rows.T
         self.step = self.step.astype(int)
