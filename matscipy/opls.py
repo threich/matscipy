@@ -24,7 +24,7 @@ import ase.data
 import ase.io
 import ase.io.lammpsrun
 import matscipy.neighbours
-
+from .ffi import first_neighbours
 
 def twochar(name):
     """
@@ -854,6 +854,7 @@ class OPLSStructure(ase.Atoms):
             self.get_neighbors()
         ibond = self.ibond
         jbond = self.jbond
+        first_n = first_neighbours(len(self), ibond)
 
         if angles:
             self.angles = angles
@@ -870,8 +871,8 @@ class OPLSStructure(ase.Atoms):
 
         for i in range(len(self)):
             iname = types[tags[i]]
+            ineigh = jbond[first_n[i]:first_n[i+1]]
 
-            ineigh = jbond[ibond == i]
             n_ineigh = np.shape(ineigh)[0]
 
             if n_ineigh not in self._combinations.keys():
