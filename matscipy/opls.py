@@ -1,6 +1,6 @@
 #
 # Copyright 2016-2017, 2023 Andreas Klemenz (Fraunhofer IWM)
-#
+#           2025 Thomas Reichenbach (Fraunhofer IWM)
 # matscipy - Materials science with Python at the atomic-scale
 # https://github.com/libAtoms/matscipy
 #
@@ -25,6 +25,7 @@ import ase.io
 import ase.io.lammpsrun
 import matscipy.neighbours
 from .ffi import first_neighbours
+
 
 def twochar(name):
     """
@@ -733,7 +734,7 @@ class OPLSStructure(ase.Atoms):
             type, index of ``bond_types``, second and third numbers:
             indicees of participating particles.
             Example: A system consists of 3 particles of type ``AA``,
-            all particles are interacting. bond_types would be 
+            all particles are interacting. bond_types would be
             ::
               ['AA-AA']
             and bond_list would be
@@ -976,6 +977,7 @@ class OPLSStructure(ase.Atoms):
             self.get_neighbors()
         ibond = self.ibond
         jbond = self.jbond
+        first_n = first_neighbours(len(self), ibond)
 
         dihedrals_undef_lists = {}
 
@@ -984,8 +986,8 @@ class OPLSStructure(ase.Atoms):
                 jname = types[tags[j]]
                 kname = types[tags[k]]
 
-                i_dihed = jbond[ibond == j]
-                l_dihed = jbond[ibond == k]
+                i_dihed = jbond[first_n[j]:first_n[j+1]]
+                l_dihed = jbond[first_n[k]:first_n[k+1]]
                 i_dihed = i_dihed[i_dihed != k]
                 l_dihed = l_dihed[l_dihed != j]
 
