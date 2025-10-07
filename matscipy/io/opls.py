@@ -303,7 +303,6 @@ def write_lammps_in(prefix):
 
             fileobj.write('read_data       %s.atoms\n' % (prefix))
             fileobj.write('include         %s.opls\n' % (prefix))
-            fileobj.write('kspace_style    pppm 1e-5\n\n')
 
             fileobj.write('neighbor        1.0 bin\n')
             fileobj.write('neigh_modify    delay 0 every 1 check yes\n\n')
@@ -523,10 +522,9 @@ def write_lammps_definitions(prefix, atoms):
                     fileobj.write(' # ' + name + '\n')
 
             # Lennard Jones settings
-            fileobj.write('\n# L-J parameters\n')
-            fileobj.write('pair_style lj/cut/coul/long %10.8f %10.8f\n' %
-                          (atoms.atom_data.lj_cutoff, atoms.atom_data.c_cutoff))
-            fileobj.write('special_bonds lj/coul 0.0 0.0 0.5\n')
+            fileobj.write('\n# Mie parameters\n')
+            fileobj.write('pair_style mie/cut %10.8f\n' %
+                          (atoms.atom_data.lj_cutoff))
             for ia, atype in enumerate(atoms.types):
                 for ib, btype in enumerate(atoms.types):
                     if len(atype) < 2:
@@ -544,11 +542,11 @@ def write_lammps_definitions(prefix, atoms):
                         fileobj.write(' # ' + pair + '\n')
                     elif atype == btype:
                         fileobj.write('pair_coeff %3d %3d' % (ia + 1, ib + 1))
-                        for value in atoms.atom_data[atype][:2]:
+                        for value in atoms.atom_data[atype]:
                             fileobj.write(' ' + str(value))
                         fileobj.write(' # ' + atype + '\n')
 
-            fileobj.write('pair_modify shift yes mix geometric\n')
+            fileobj.write('pair_modify tail yes\n')
 
             # Charges
             fileobj.write('\n# charges\n')
@@ -556,7 +554,8 @@ def write_lammps_definitions(prefix, atoms):
                 if len(atype) < 2:
                     atype = atype + ' '
                 fileobj.write('set type ' + str(ia + 1))
-                fileobj.write(' charge ' + str(atoms.atom_data[atype][2]))
+#                fileobj.write(' charge ' + str(atoms.atom_data[atype][2]))
+                fileobj.write(' charge ' + str(0.0))
                 fileobj.write(' # ' + atype + '\n')
 
 

@@ -694,7 +694,7 @@ class OPLSStructure(ase.Atoms):
         self.charges = np.zeros(len(self), dtype=float)
 
         for i, itype in enumerate(self.types):
-            self.charges[self.get_tags() == i] = self.atom_data[itype][2]
+            self.charges[self.get_tags() == i] = 0 # self.atom_data[itype][2]
 
         return self.charges
 
