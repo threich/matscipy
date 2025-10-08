@@ -144,7 +144,10 @@ def read_block(filename, name):
                             if word[0] == '#':
                                 break
                             else:
-                                data[symbol].append(float(word))
+                                try:
+                                    data[symbol].append(float(word))
+                                except ValueError:
+                                    data[symbol].append(word)
                         if len(data[symbol]) == 1:
                             data[symbol] = data[symbol][0]
 
@@ -239,12 +242,7 @@ def read_parameter_file(filename):
     """
     ljq = matscipy.opls.LJQData(read_block(filename, 'Element'))
 
-    try:
-        ljq_cut = read_block(filename, 'Cutoffs-LJ-Coulomb')
-        ljq.lj_cutoff = ljq_cut['LJ']
-        ljq.c_cutoff = ljq_cut['C']
-    except:
-        pass
+    ljq.ljq_cut = read_block(filename, 'Cutoffs-LJ-Coulomb')
 
     try:
         ljq.lj_pairs = read_block(filename, 'LJ-pairs')
@@ -302,8 +300,7 @@ def write_lammps_in(prefix):
             fileobj.write('boundary        p p p\n\n')
 
             fileobj.write('read_data       %s.atoms\n' % (prefix))
-            fileobj.write('include         %s.opls\n' % (prefix))
-            fileobj.write('kspace_style    pppm 1e-5\n\n')
+            fileobj.write('include         %s.opls\n\n' % (prefix))
 
             fileobj.write('neighbor        1.0 bin\n')
             fileobj.write('neigh_modify    delay 0 every 1 check yes\n\n')
@@ -393,7 +390,7 @@ def write_lammps_atoms(prefix, atoms, units='metal'):
                 positions_lammps_str = map(p.pos_to_lammps_str, pos)
 
             for i, r in enumerate(positions_lammps_str):
-                q = ase.calculators.lammpsrun.convert(atoms.atom_data[types[tags[i]]][2], 'charge', 'ASE', units)
+                q = ase.calculators.lammpsrun.convert(atoms.atom_data[types[tags[i]]][-1], 'charge', 'ASE', units)
                 fileobj.write('%6d %3d %3d %s %s %s %s' % ((i + 1, molid[i],
                                                             tags[i] + 1,
                                                             q)
@@ -523,10 +520,14 @@ def write_lammps_definitions(prefix, atoms):
                     fileobj.write(' # ' + name + '\n')
 
             # Lennard Jones settings
-            fileobj.write('\n# L-J parameters\n')
-            fileobj.write('pair_style lj/cut/coul/long %10.8f %10.8f\n' %
-                          (atoms.atom_data.lj_cutoff, atoms.atom_data.c_cutoff))
-            fileobj.write('special_bonds lj/coul 0.0 0.0 0.5\n')
+            fileobj.write('\n# Nonbonded parameters\n')
+
+            for key, values in atoms.atom_data.ljq_cut.items():
+                fileobj.write('{}'.format(key))
+                for value in values:
+                    fileobj.write(' ' + str(value))
+                fileobj.write('\n')
+
             for ia, atype in enumerate(atoms.types):
                 for ib, btype in enumerate(atoms.types):
                     if len(atype) < 2:
@@ -544,11 +545,10 @@ def write_lammps_definitions(prefix, atoms):
                         fileobj.write(' # ' + pair + '\n')
                     elif atype == btype:
                         fileobj.write('pair_coeff %3d %3d' % (ia + 1, ib + 1))
-                        for value in atoms.atom_data[atype][:2]:
+                        for value in atoms.atom_data[atype][:-1]:
                             fileobj.write(' ' + str(value))
                         fileobj.write(' # ' + atype + '\n')
 
-            fileobj.write('pair_modify shift yes mix geometric\n')
 
             # Charges
             fileobj.write('\n# charges\n')
@@ -556,7 +556,7 @@ def write_lammps_definitions(prefix, atoms):
                 if len(atype) < 2:
                     atype = atype + ' '
                 fileobj.write('set type ' + str(ia + 1))
-                fileobj.write(' charge ' + str(atoms.atom_data[atype][2]))
+                fileobj.write(' charge ' + str(atoms.atom_data[atype][-1]))
                 fileobj.write(' # ' + atype + '\n')
 
 
