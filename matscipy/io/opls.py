@@ -84,7 +84,7 @@ def read_extended_xyz(fileobj):
     return opls_struct
 
 
-def read_block(filename, name):
+def read_block(filename, name, append=False):
     """
     Read a named data block from a parameter file for a non-reactive
     potential. Blocks begin with ``# name`` and are terminated by empty
@@ -139,7 +139,11 @@ def read_block(filename, name):
                         continue
                     else:
                         symbol = line[0]
-                        data[symbol] = []
+                        if symbol in data and append:
+                            data[symbol].append('\n')
+                            data[symbol].append(symbol)
+                        else:
+                            data[symbol] = []
                         for word in line[1:]:
                             if word[0] == '#':
                                 break
@@ -242,7 +246,7 @@ def read_parameter_file(filename):
     """
     ljq = matscipy.opls.LJQData(read_block(filename, 'Element'))
 
-    ljq.ljq_cut = read_block(filename, 'Cutoffs-LJ-Coulomb')
+    ljq.ljq_cut = read_block(filename, 'Cutoffs-LJ-Coulomb', append=True)
 
     try:
         ljq.lj_pairs = read_block(filename, 'LJ-pairs')
